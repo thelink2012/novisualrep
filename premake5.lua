@@ -1,73 +1,46 @@
---[[
-    NFSU2 No Visual Rep Build Script
-    Use 'premake5 --help' for help
---]]
+workspace "novisualrep"
+    platforms { "Win32" }
 
---[[
-    Options and Actions
---]]
-
-newoption {
-    trigger     = "outdir",
-    value       = "path",
-    description = "Output directory for the build files"
-}
-if not _OPTIONS["outdir"] then
-    _OPTIONS["outdir"] = "build"
-end
-
-
---[[
-    The Solution
---]]
-solution "NFSU2 No Visual Rep"
-
+project "novisualrep"
+    language "C++"
+    kind "SharedLib"
+    targetname "novisualrep"
+    targetextension ".asi"
+    includedirs "deps/injector/include"
+    
+workspace "*"
     configurations { "Release", "Debug" }
-
-    location( _OPTIONS["outdir"] )
-    targetprefix "" -- no 'lib' prefix on gcc
+    location "build"
     targetdir "bin"
     implibdir "bin"
-
-    startproject "novisualrep"
-
+    targetprefix "" -- no 'lib' prefix on gcc
+    
+    files { "src/**.cpp" }
+    
     flags {
-        "StaticRuntime",
+        "NoPCH",
         "NoImportLib",
-        "NoRTTI",
         "NoBufferSecurityCheck"
     }
+    staticruntime "On"
 
-    defines {
-        "_CRT_SECURE_NO_WARNINGS",
-        "_SCL_SECURE_NO_WARNINGS"
-    }
+filter "configurations:Debug"
+    symbols "On"
+    
+filter "configurations:Release"
+    defines { "NDEBUG" }
+    symbols "Off"
+    
+    optimize "Speed"
+    functionlevellinking "On"
+    flags { "LinkTimeOptimization" }
+    
+filter { "toolset:*_xp"}
+    defines { "WINVER=0x0501", "_WIN32_WINNT=0x0501" }
+    buildoptions { "/Zc:threadSafeInit-" }
+    
+filter { "action:vs*" }
+    defines { "_CRT_SECURE_NO_WARNINGS", "_SCL_SECURE_NO_WARNINGS" }
 
-    configuration "Debug*"
-        flags { "Symbols" }
-        
-    configuration "Release*"
-        defines { "NDEBUG" }
-        optimize "Speed"
-
-    configuration "vs*"
-        buildoptions { "/arch:IA32" }           -- disable the use of SSE/SSE2 instructions
-
-    project "novisualrep"
-        language "C++"
-        kind "SharedLib"
-        targetname "novisualrep"
-        targetextension ".asi"
-        
-        flags { "NoPCH" }
-
-        files {
-            "src/**.cpp",
-            "src/**.hpp",
-            "src/**.h",
-        }
-		
-		includedirs {
-			"src",
-			"deps/injector/include"
-		}
+filter { "action:vs*", "platforms:Win32" }
+    buildoptions { "/arch:IA32" } -- disable SSE/SSE2
