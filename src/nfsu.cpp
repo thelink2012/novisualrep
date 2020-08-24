@@ -113,9 +113,7 @@ const RaceReputationEntry aRaceReputationTable[] {
 const RaceMagazineEntry aRaceMagazineTable[] {
 
     // NOTE: These should be events that are the sole events in the 
-    // Race Map once they are unlocked. See IsPreviousEventCompleted for
-    // a reasoning. Otherwise, the said function must be tweaked to
-    // check for more than one previous event.
+    // Race Map once they are unlocked. See ProcessMagazineGiveaway.
 
     // Would require building a 1 star reputation car (~3 upgrades).
     // Possible to achieve since the beggining of UG.
@@ -157,9 +155,10 @@ const RaceMagazineEntry aRaceMagazineTable[] {
     { 112, UnlockMagazine19 },
 };
 
+const int MAX_EVENTS = 114;
+
 bool IsEventCompleted(uint8_t ubEventId)
 {
-    const int MAX_EVENTS = 114;
     const auto aEventState = reinterpret_cast<uint8_t*>(0x75F244);
     
     enum eEventState : uint8_t
@@ -179,23 +178,6 @@ bool IsEventCompleted(uint8_t ubEventId)
             ubEventState == EVENT_STATE_SKIPPED;
 }
 
-bool IsPreviousEventCompleted(uint8_t ubEventId)
-{
-    // This is a hack, but it should work.
-    //
-    // Since our magazine table specifies the event on which the
-    // magazine should be received, and the event completion is only
-    // marked at the loading screen after the race, we actually check
-    // for the races completed before the race of interest.
-    //
-    // Better, we check for a single race before the interesting one.
-    // This works fine because all events in the magazine table are
-    // the sole events in the Race Map once they are unlocked. Therefore
-    // if the previous event was completed, all others were too.
-    assert(ubEventId > 0);
-    return IsEventCompleted(ubEventId - 1);
-}
-
 void ProcessMagazineGiveaway()
 {
     // Based off sub_51B060
@@ -205,13 +187,31 @@ void ProcessMagazineGiveaway()
     
     const auto iUnknownHash = fnComputeUnkHash(0, "MAGAZINE_TASK_1");
     const auto iUnknownId = fnComputeUnkIndex(iUnknownHash);
+    assert(iUnknownId == 11);
     
-    DebugPrint("iUnknownHash = %d\n", iUnknownHash);
-    DebugPrint("iUnknownId = %d\n", iUnknownId);
+    // For giving away a magazine at event i-th, We cannot check for the
+    // completion of the i-th race since the event state array is only
+    // modified after the race is complete, in the loading screen.
+    // For this reason, all previous races are checked, such that the
+    // reward flag is set before the i-th race event is started. For
+    // this to work perfectly well, the i-th race of interest must be
+    // the sole race in the Race Map at any given time, otherwise race
+    // completion order would interfere with this algorithm.
+    
+    // The following array determines whether all previous events from
+    // the i-th event were completed.
+    bool aPrevEventsCompletedPrefixSum[MAX_EVENTS];
+    aPrevEventsCompletedPrefixSum[0] = true;
+    for(uint8_t i = 1; i < MAX_EVENTS; ++i)
+    {
+        aPrevEventsCompletedPrefixSum[i] = 
+            aPrevEventsCompletedPrefixSum[i - 1] && IsEventCompleted(i - 1);
+    }
     
     for(const auto& magEntry : aRaceMagazineTable)
     {
-        if(IsPreviousEventCompleted(magEntry.m_ubEventId))
+        assert(magEntry.m_ubEventId < MAX_EVENTS);
+        if(aPrevEventsCompletedPrefixSum[magEntry.m_ubEventId])
             magEntry.m_fnUnlockReward(iUnknownId);
     }
 }
@@ -241,7 +241,6 @@ double __cdecl CalculateVisualRep(/*int a1@<edi>*/)
     if(fTotalRep > MAX_REPUTATION)
         fTotalRep = MAX_REPUTATION;
 
-    DebugPrint("CalculateVisualRep() = %f\n", fTotalRep);
     return fTotalRep;
 }
 
